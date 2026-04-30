@@ -1,0 +1,15 @@
+.env
+.env.local
+.venv/
+.uv-cache/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+node_modules/
+.next/
+out/
+dist/
+*.log
+
