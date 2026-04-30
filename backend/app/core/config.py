@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     )
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_tracing_enabled: bool = Field(default=False, alias="OPENAI_TRACING_ENABLED")
+    langfuse_tracing_enabled: bool = Field(default=False, alias="LANGFUSE_TRACING_ENABLED")
+    langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
+    langfuse_base_url: str = Field(
+        default="https://cloud.langfuse.com",
+        alias="LANGFUSE_BASE_URL",
+    )
     app_env: str = Field(default="local", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     frontend_origin: str = Field(

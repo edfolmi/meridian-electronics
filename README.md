@@ -125,6 +125,10 @@ Add screenshots after deployment:
 | `OPENROUTER_EVALUATOR_MODEL` | No | Low-cost evaluator model for account-intent classification |
 | `OPENAI_API_KEY` | No | Enables OpenAI trace export when tracing is enabled |
 | `OPENAI_TRACING_ENABLED` | No | Set `true` to send metadata-only traces to OpenAI |
+| `LANGFUSE_TRACING_ENABLED` | No | Set `true` to send metadata-only traces to Langfuse |
+| `LANGFUSE_PUBLIC_KEY` | No | Langfuse public key |
+| `LANGFUSE_SECRET_KEY` | No | Langfuse secret key |
+| `LANGFUSE_BASE_URL` | No | Langfuse host, default `https://cloud.langfuse.com` |
 | `FRONTEND_ORIGIN` | No | CORS origin for local/prod frontend |
 | `NEXT_PUBLIC_API_BASE_URL` | Yes | Browser-visible FastAPI base URL |
 
@@ -253,6 +257,7 @@ Included:
 - Low-cost evaluator model to detect account/order-history intent before main chat
 - Early sign-in prompt for unauthenticated account-specific requests
 - Optional OpenAI Agents SDK tracing with metadata-only custom spans
+- Optional Langfuse tracing with metadata-only spans and serverless flush
 - No raw PIN, chat content, tool results, customer history, or order details are intentionally logged in traces
 
 ## Known Limitations
