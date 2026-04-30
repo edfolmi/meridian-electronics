@@ -1,0 +1,14 @@
+.env
+.env.local
+.git
+.next
+.venv
+.uv-cache
+backend/.venv
+backend/.uv-cache
+backend/.pytest_cache
+frontend/.next
+frontend/node_modules
+node_modules
+*.log
+
