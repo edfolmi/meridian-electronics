@@ -14,6 +14,15 @@ def test_health_endpoint() -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_tracing_status_endpoint() -> None:
+    client = TestClient(create_app())
+    response = client.get("/api/tracing/status")
+
+    assert response.status_code == 200
+    assert "enabled" in response.json()
+    assert "openai_key_present" in response.json()
+
+
 def test_chat_endpoint_uses_orchestrator(monkeypatch) -> None:
     class FakeOrchestrator:
         def __init__(self, _settings) -> None:

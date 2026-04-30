@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.auth import router as auth_router
 from app.core.config import get_settings
+from app.core.tracing import tracing_status
 from app.llm.orchestrator import ChatOrchestrationError, ChatOrchestrator
 from app.mcp.client import McpClient, McpError
 from app.schemas.chat import ChatRequest, ChatResponse
@@ -14,6 +15,11 @@ router.include_router(auth_router)
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "meridian-support-api"}
+
+
+@router.get("/tracing/status")
+async def get_tracing_status() -> dict[str, bool | str]:
+    return tracing_status(get_settings())
 
 
 @router.get("/mcp/tools", response_model=ToolDiscoveryResponse)
