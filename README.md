@@ -119,6 +119,11 @@ Add screenshots after deployment:
 | `OPENROUTER_API_KEY` | Yes for chat | OpenRouter API key |
 | `OPENROUTER_MODEL` | No | Cost-effective OpenRouter model, default `gpt-4o-mini` |
 | `OPENROUTER_BASE_URL` | No | Default `https://openrouter.ai/api/v1` |
+| `GUARDRAILS_ENABLED` | No | Enables OpenRouter guardrail/evaluator checks |
+| `OPENROUTER_GUARDRAIL_MODEL` | No | Llama Guard model used for safety classification |
+| `OPENROUTER_EVALUATOR_MODEL` | No | Low-cost evaluator model for account-intent classification |
+| `OPENAI_API_KEY` | No | Enables OpenAI trace export when tracing is enabled |
+| `OPENAI_TRACING_ENABLED` | No | Set `true` to send metadata-only traces to OpenAI |
 | `FRONTEND_ORIGIN` | No | CORS origin for local/prod frontend |
 | `NEXT_PUBLIC_API_BASE_URL` | Yes | Browser-visible FastAPI base URL |
 
@@ -232,6 +237,22 @@ Included:
 - Chat requests include only safe authenticated customer session context
 - LLM tool list excludes `verify_customer_pin`
 - Prompt explicitly forbids asking for credentials in chat
+
+### Optional Guardrails and Tracing
+
+Suggested commit message:
+
+```text
+feat: add OpenRouter guardrails and optional OpenAI tracing
+```
+
+Included:
+
+- Llama Guard input safety check through OpenRouter
+- Low-cost evaluator model to detect account/order-history intent before main chat
+- Early sign-in prompt for unauthenticated account-specific requests
+- Optional OpenAI Agents SDK tracing with metadata-only custom spans
+- No raw PIN, chat content, tool results, customer history, or order details are intentionally logged in traces
 
 ## Known Limitations
 

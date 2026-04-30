@@ -15,6 +15,17 @@ class Settings(BaseSettings):
         default="https://openrouter.ai/api/v1",
         alias="OPENROUTER_BASE_URL",
     )
+    guardrails_enabled: bool = Field(default=True, alias="GUARDRAILS_ENABLED")
+    openrouter_guardrail_model: str = Field(
+        default="meta-llama/llama-guard-3-8b",
+        alias="OPENROUTER_GUARDRAIL_MODEL",
+    )
+    openrouter_evaluator_model: str = Field(
+        default="openai/gpt-4o-mini",
+        alias="OPENROUTER_EVALUATOR_MODEL",
+    )
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_tracing_enabled: bool = Field(default=False, alias="OPENAI_TRACING_ENABLED")
     app_env: str = Field(default="local", alias="APP_ENV")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     frontend_origin: str = Field(

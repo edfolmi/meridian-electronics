@@ -5,6 +5,8 @@ from typing import Any
 from openai import AsyncOpenAI, OpenAIError
 
 from app.core.config import Settings
+from app.core.tracing import chat_trace, safe_custom_span, safe_guardrail_span
+from app.llm.guardrails import GuardrailService
 from app.llm.prompts import SYSTEM_PROMPT
 from app.llm.tools import format_tool_result, mcp_tool_to_openai, parse_tool_arguments
 from app.mcp.client import McpClient, McpError, new_request_id
@@ -30,6 +32,7 @@ class ChatOrchestrator:
             api_key=settings.openrouter_api_key or "missing",
             base_url=settings.openrouter_base_url,
         )
+        self.guardrails = GuardrailService(settings)
 
     async def respond(
         self,
@@ -40,86 +43,136 @@ class ChatOrchestrator:
         if not self.settings.openrouter_api_key:
             raise ChatOrchestrationError("OPENROUTER_API_KEY is not configured")
 
+        with chat_trace(self.settings, request_id, authenticated=customer is not None):
+            return await self._respond_with_trace(request_id, messages, customer)
+
+    async def _respond_with_trace(
+        self,
+        request_id: str,
+        messages: list[ChatMessage],
+        customer: CustomerSession | None,
+    ) -> ChatResponse:
         started = time.perf_counter()
         tool_summaries: list[ToolCallSummary] = []
+
+        latest_user_message = next(
+            (message.content for message in reversed(messages) if message.role == "user"),
+            "",
+        )
+        with safe_guardrail_span("input safety", triggered=False):
+            safety = await self.guardrails.check_input(latest_user_message)
+        if not safety.allowed:
+            return ChatResponse(
+                message=(
+                    "I cannot help with that request. I can still help with "
+                    "Meridian product availability, orders, and account support."
+                ),
+                request_id=request_id,
+                tool_calls=[],
+            )
+
+        with safe_custom_span("account intent evaluator"):
+            intent = await self.guardrails.evaluate_account_intent(messages)
+        if intent.requires_auth and customer is None:
+            return ChatResponse(
+                message=(
+                    "Please use the secure sign-in form before I access order "
+                    "history, order details, or account-specific support."
+                ),
+                request_id=request_id,
+                tool_calls=[],
+            )
+
         mcp_tools = await self._discover_tools()
         llm_messages = self._build_messages(messages, customer)
         openai_tools = [mcp_tool_to_openai(tool) for tool in mcp_tools]
 
         for _round in range(MAX_TOOL_ROUNDS):
-            completion = await self._chat_completion(llm_messages, openai_tools)
-            message = completion.choices[0].message
-            tool_calls = message.tool_calls or []
+            with safe_custom_span("assistant generation", {"model": self.settings.openrouter_model}):
+                completion = await self._chat_completion(llm_messages, openai_tools)
+                message = completion.choices[0].message
+                tool_calls = message.tool_calls or []
 
-            if not tool_calls:
-                elapsed_ms = int((time.perf_counter() - started) * 1000)
-                logger.info(
-                    "chat request_id=%s completed latency_ms=%s tools=%s",
-                    request_id,
-                    elapsed_ms,
-                    [summary.name for summary in tool_summaries],
-                )
-                return ChatResponse(
-                    message=message.content or "",
-                    request_id=request_id,
-                    tool_calls=tool_summaries,
-                )
-
-            llm_messages.append(
-                {
-                    "role": "assistant",
-                    "content": message.content,
-                    "tool_calls": [
-                        {
-                            "id": call.id,
-                            "type": "function",
-                            "function": {
-                                "name": call.function.name,
-                                "arguments": call.function.arguments,
-                            },
-                        }
-                        for call in tool_calls
-                    ],
-                }
-            )
-            for call in tool_calls:
-                tool_started = time.perf_counter()
-                tool_name = call.function.name
-                try:
-                    arguments = parse_tool_arguments(call.function.arguments)
-                    self._validate_tool_call(tool_name, arguments, customer)
-                    result = await self.mcp_client.call_tool(tool_name, arguments)
-                    content = format_tool_result(result)
-                    ok = not bool(result.get("isError"))
-                except (ValueError, McpError) as exc:
-                    content = f"Tool call failed: {exc}"
-                    ok = False
-
-                latency_ms = int((time.perf_counter() - tool_started) * 1000)
-                tool_summaries.append(
-                    ToolCallSummary(
-                        name=tool_name,
-                        ok=ok,
-                        latency_ms=latency_ms,
+                if not tool_calls:
+                    elapsed_ms = int((time.perf_counter() - started) * 1000)
+                    logger.info(
+                        "chat request_id=%s completed latency_ms=%s tools=%s",
+                        request_id,
+                        elapsed_ms,
+                        [summary.name for summary in tool_summaries],
                     )
-                )
-                logger.info(
-                    "tool request_id=%s name=%s ok=%s latency_ms=%s",
-                    request_id,
-                    tool_name,
-                    ok,
-                    latency_ms,
-                )
+                    return ChatResponse(
+                        message=message.content or "",
+                        request_id=request_id,
+                        tool_calls=tool_summaries,
+                    )
+
                 llm_messages.append(
                     {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "name": tool_name,
-                        "content": content,
+                        "role": "assistant",
+                        "content": message.content,
+                        "tool_calls": [
+                            {
+                                "id": call.id,
+                                "type": "function",
+                                "function": {
+                                    "name": call.function.name,
+                                    "arguments": call.function.arguments,
+                                },
+                            }
+                            for call in tool_calls
+                        ],
                     }
                 )
+            for call in tool_calls:
+                await self._run_tool_call(call, customer, request_id, tool_summaries, llm_messages)
 
         raise ChatOrchestrationError("The assistant used too many tool-call rounds")
+
+    async def _run_tool_call(
+        self,
+        call: Any,
+        customer: CustomerSession | None,
+        request_id: str,
+        tool_summaries: list[ToolCallSummary],
+        llm_messages: list[dict[str, Any]],
+    ) -> None:
+        tool_started = time.perf_counter()
+        tool_name = call.function.name
+        with safe_custom_span("mcp tool call", {"tool": tool_name}):
+            try:
+                arguments = parse_tool_arguments(call.function.arguments)
+                self._validate_tool_call(tool_name, arguments, customer)
+                result = await self.mcp_client.call_tool(tool_name, arguments)
+                content = format_tool_result(result)
+                ok = not bool(result.get("isError"))
+            except (ValueError, McpError) as exc:
+                content = f"Tool call failed: {exc}"
+                ok = False
+
+        latency_ms = int((time.perf_counter() - tool_started) * 1000)
+        tool_summaries.append(
+            ToolCallSummary(
+                name=tool_name,
+                ok=ok,
+                latency_ms=latency_ms,
+            )
+        )
+        logger.info(
+            "tool request_id=%s name=%s ok=%s latency_ms=%s",
+            request_id,
+            tool_name,
+            ok,
+            latency_ms,
+        )
+        llm_messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": call.id,
+                "name": tool_name,
+                "content": content,
+            }
+        )
 
     async def _discover_tools(self) -> list[Any]:
         try:

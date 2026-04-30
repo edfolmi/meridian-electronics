@@ -43,7 +43,56 @@ def test_llm_auth_context_excludes_email_and_pin() -> None:
     assert "PIN" in context
 
 
+def test_account_intent_blocks_unauthenticated_customer_history() -> None:
+    orchestrator = ChatOrchestrator(Settings(OPENROUTER_API_KEY="test"))
+    orchestrator.guardrails = FakeGuardrails(requires_auth=True)
+
+    response = _run(
+        orchestrator._respond_with_trace(
+            "req123",
+            [ChatMessage(role="user", content="Show my recent orders")],
+            customer=None,
+        )
+    )
+
+    assert "secure sign-in form" in response.message
+
+
+def test_safety_guardrail_blocks_before_tool_discovery() -> None:
+    orchestrator = ChatOrchestrator(Settings(OPENROUTER_API_KEY="test"))
+    orchestrator.guardrails = FakeGuardrails(allowed=False)
+
+    response = _run(
+        orchestrator._respond_with_trace(
+            "req123",
+            [ChatMessage(role="user", content="unsafe request")],
+            customer=None,
+        )
+    )
+
+    assert "cannot help" in response.message
+
+
 def _run(coro):
     import asyncio
 
     return asyncio.run(coro)
+
+
+class FakeDecision:
+    def __init__(self, allowed=True, requires_auth=False) -> None:
+        self.allowed = allowed
+        self.requires_auth = requires_auth
+        self.reason = "test"
+
+
+class FakeGuardrails:
+    def __init__(self, allowed=True, requires_auth=False) -> None:
+        self.allowed = allowed
+        self.requires_auth = requires_auth
+
+    async def check_input(self, _message):
+        return FakeDecision(allowed=self.allowed)
+
+    async def evaluate_account_intent(self, _messages):
+        return FakeDecision(requires_auth=self.requires_auth)
