@@ -55,7 +55,7 @@ class GuardrailService:
             return SafetyDecision(allowed=False, reason="guardrail unavailable")
 
         verdict = (response.choices[0].message.content or "").strip().lower()
-        if verdict.startswith("unsafe"):
+        if verdict.startswith("unsafe") and self.settings.safety_guardrail_enforce:
             return SafetyDecision(allowed=False, reason="llama guard blocked input")
         return SafetyDecision(allowed=True, reason="safe")
 
@@ -85,13 +85,13 @@ class GuardrailService:
             )
         except OpenAIError as exc:
             logger.warning("intent evaluator unavailable: %s", exc.__class__.__name__)
-            return IntentDecision(requires_auth=True, reason="intent evaluator unavailable")
+            return self._keyword_account_intent(latest_user_message)
 
         content = response.choices[0].message.content or "{}"
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError:
-            return IntentDecision(requires_auth=True, reason="invalid evaluator response")
+            return self._keyword_account_intent(latest_user_message)
 
         return IntentDecision(
             requires_auth=bool(parsed.get("requires_auth")),
@@ -101,3 +101,22 @@ class GuardrailService:
     def _enabled(self) -> bool:
         return self.settings.guardrails_enabled and bool(self.settings.openrouter_api_key)
 
+    def _keyword_account_intent(self, message: str) -> IntentDecision:
+        text = message.lower()
+        keywords = (
+            "my order",
+            "my recent order",
+            "order history",
+            "recent orders",
+            "track my",
+            "my account",
+            "invoice",
+            "payment",
+            "shipping status",
+            "place an order",
+            "create order",
+        )
+        return IntentDecision(
+            requires_auth=any(keyword in text for keyword in keywords),
+            reason="keyword fallback",
+        )

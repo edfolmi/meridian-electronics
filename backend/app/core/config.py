@@ -16,6 +16,10 @@ class Settings(BaseSettings):
         alias="OPENROUTER_BASE_URL",
     )
     guardrails_enabled: bool = Field(default=True, alias="GUARDRAILS_ENABLED")
+    safety_guardrail_enforce: bool = Field(
+        default=False,
+        alias="SAFETY_GUARDRAIL_ENFORCE",
+    )
     openrouter_guardrail_model: str = Field(
         default="meta-llama/llama-guard-3-8b",
         alias="OPENROUTER_GUARDRAIL_MODEL",

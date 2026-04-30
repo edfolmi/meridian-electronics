@@ -120,6 +120,7 @@ Add screenshots after deployment:
 | `OPENROUTER_MODEL` | No | Cost-effective OpenRouter model, default `gpt-4o-mini` |
 | `OPENROUTER_BASE_URL` | No | Default `https://openrouter.ai/api/v1` |
 | `GUARDRAILS_ENABLED` | No | Enables OpenRouter guardrail/evaluator checks |
+| `SAFETY_GUARDRAIL_ENFORCE` | No | Set `true` to block Llama Guard unsafe verdicts; default keeps it advisory |
 | `OPENROUTER_GUARDRAIL_MODEL` | No | Llama Guard model used for safety classification |
 | `OPENROUTER_EVALUATOR_MODEL` | No | Low-cost evaluator model for account-intent classification |
 | `OPENAI_API_KEY` | No | Enables OpenAI trace export when tracing is enabled |
